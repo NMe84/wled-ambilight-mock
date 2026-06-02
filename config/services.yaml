@@ -1,0 +1,16 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    App\Service\LedStateService:
+        arguments:
+            $ledCount: '%env(int:LED_COUNT)%'
+            $varDir: '%kernel.project_dir%/var'
