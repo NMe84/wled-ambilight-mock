@@ -65,12 +65,8 @@
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
-              <feGaussianBlur stdDeviation="20" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="blur" />
-              </feMerge>
+            <filter id="glow" x="-300%" y="-300%" width="700%" height="700%">
+              <feGaussianBlur stdDeviation="55" />
             </filter>
           </defs>
 
@@ -80,8 +76,8 @@
               v-if="isLit(i)"
               :cx="pos.x"
               :cy="pos.y"
-              r="50"
-              :fill="`rgba(${ledColor(i).join(',')},0.45)`"
+              r="120"
+              :fill="`rgba(${ledColor(i).join(',')},0.6)`"
               filter="url(#glow)"
             />
           </template>
@@ -169,7 +165,7 @@
 <script>
 const STORAGE_KEY = 'wled-mock-config';
 const DISPLAY_MAX_W = 700;
-const TV_OFFSET = 110;
+const TV_OFFSET = 160;
 const BEZEL = 14;
 const LED_OFFSET = 7; // mid-bezel — glows spread outward, TV covers the inner half
 
