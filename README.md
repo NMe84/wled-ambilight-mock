@@ -69,21 +69,45 @@ The push payload matches WLED's `/json/si` envelope:
 
 ### Client → server (commands)
 
-Send any JSON that the [JSON API](#api) accepts. State updates and colour commands both work:
+Send any JSON that the [JSON API](#api) accepts. The connection is kept open indefinitely — send as many frames as needed without reconnecting.
+
+#### Setting LED colours
+
+Colours are carried in the `seg[0].i` field. Two formats are supported:
+
+**Flat format** — a single array of `R, G, B` byte triplets, applied sequentially from LED 0. This is the most efficient format for full-strip updates:
 
 ```js
 const ws = new WebSocket('ws://localhost:8001');
 
-// Set colours (flat format: sequential R,G,B values from LED 0)
-ws.send(JSON.stringify({ seg: [{ i: [255, 0, 0,  0, 255, 0,  0, 0, 255] }] }));
+// Build a flat [R, G, B, R, G, B, ...] array for all LEDs
+const colours = [];
+for (const [r, g, b] of myLedColours) {
+  colours.push(r, g, b);
+}
 
-// Set colours (indexed format: [index, [r,g,b], index, [r,g,b], ...])
-ws.send(JSON.stringify({ seg: [{ i: [0, [255, 0, 0], 5, [0, 255, 0]] }] }));
+ws.send(JSON.stringify({ seg: [{ i: colours }] }));
+```
 
-// Adjust brightness or power
+**Indexed format** — interleaved LED index and `[R, G, B]` tuple pairs. Useful for sparse updates where only some LEDs change:
+
+```js
+// Set LED 0 to red, LED 5 to green, LED 12 to blue
+ws.send(JSON.stringify({
+  seg: [{ i: [0, [255, 0, 0],  5, [0, 255, 0],  12, [0, 0, 255]] }]
+}));
+```
+
+#### Other commands
+
+```js
+// Adjust brightness (0–255) or toggle power
 ws.send(JSON.stringify({ on: true, bri: 200 }));
 
-// Request a full state push (WLED {"v":true} command)
+// Combine colour and brightness in one message
+ws.send(JSON.stringify({ bri: 180, seg: [{ i: colours }] }));
+
+// Request an immediate full state push (WLED {"v":true} command)
 ws.send(JSON.stringify({ v: true }));
 ```
 
