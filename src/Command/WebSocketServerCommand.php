@@ -38,7 +38,7 @@ class WebSocketServerCommand extends Command
 
         $clients = [];       // id => socket resource
         $clientState = [];   // id => 'handshake'|'connected'
-        $lastMtime = 0;
+        $lastHash = '';
         $lastCheck = 0.0;
 
         while (true) {
@@ -81,11 +81,10 @@ class WebSocketServerCommand extends Command
             $now = microtime(true);
             if ($now - $lastCheck >= 0.05) {
                 $lastCheck = $now;
-                clearstatcache(true, $stateFile);
                 if (file_exists($stateFile)) {
-                    $mtime = filemtime($stateFile);
-                    if ($mtime !== $lastMtime) {
-                        $lastMtime = $mtime;
+                    $hash = md5_file($stateFile);
+                    if ($hash !== $lastHash) {
+                        $lastHash = $hash;
                         $frame = $this->encodeFrame(json_encode($this->ledState->getState()));
                         foreach ($clients as $id => $sock) {
                             if (($clientState[$id] ?? '') === 'connected') {
