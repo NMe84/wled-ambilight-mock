@@ -65,6 +65,8 @@ class WledController extends AbstractController
     #[Route('/json/state', name: 'wled_state_post', methods: ['POST'])]
     public function postState(Request $request): JsonResponse
     {
+        set_time_limit(1);
+
         $body = $request->getContent();
         $data = json_decode($body, true);
 
