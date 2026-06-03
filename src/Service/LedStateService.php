@@ -13,6 +13,11 @@ class LedStateService
         $this->stateFile = $varDir . '/led_state.json';
     }
 
+    public function getStateFilePath(): string
+    {
+        return $this->stateFile;
+    }
+
     public function getState(): array
     {
         $state = $this->readState();
@@ -39,6 +44,9 @@ class LedStateService
         }
 
         if (!empty($data['seg']) && is_array($data['seg'])) {
+            if (!array_key_exists('on', $data)) {
+                $state['on'] = true;
+            }
             foreach ($data['seg'] as $seg) {
                 if (!isset($seg['i']) || !is_array($seg['i'])) {
                     continue;

@@ -165,6 +165,7 @@
 
 <script>
 const STORAGE_KEY = 'wled-mock-config';
+const WS_PORT = 8001;
 const DISPLAY_MAX_W = 700;
 const TV_OFFSET = 160;
 const BEZEL = 14;
@@ -192,7 +193,8 @@ export default {
       sending: false,
       manualPayload: '',
       lastResponse: null,
-      pollTimer: null,
+      ws: null,
+      wsReconnectTimer: null,
       TV_OFFSET,
       BEZEL,
     };
@@ -307,6 +309,32 @@ export default {
       return c[0] > 0 || c[1] > 0 || c[2] > 0;
     },
 
+    connectWebSocket() {
+      const ws = new WebSocket(`ws://${window.location.hostname}:${WS_PORT}`);
+
+      ws.onopen = () => {
+        this.online = true;
+        clearTimeout(this.wsReconnectTimer);
+        this.wsReconnectTimer = null;
+      };
+
+      ws.onmessage = ({ data }) => {
+        const state = JSON.parse(data);
+        this.leds = state.leds || [];
+        this.powered = state.on !== false;
+      };
+
+      ws.onclose = () => {
+        this.online = false;
+        this.ws = null;
+        this.wsReconnectTimer = setTimeout(() => this.connectWebSocket(), 2000);
+      };
+
+      ws.onerror = () => ws.close();
+
+      this.ws = ws;
+    },
+
     saveConfig() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
     },
@@ -319,19 +347,6 @@ export default {
         } catch {
           this.config = { ...DEFAULT_CONFIG };
         }
-      }
-    },
-
-    async pollState() {
-      try {
-        const res = await fetch('/json/state');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        this.leds = data.leds || [];
-        this.powered = data.on !== false;
-        this.online = true;
-      } catch {
-        this.online = false;
       }
     },
 
@@ -399,12 +414,12 @@ export default {
   mounted() {
     this.loadConfig();
     this.fetchInfo();
-    this.pollState();
-    this.pollTimer = setInterval(() => this.pollState(), 250);
+    this.connectWebSocket();
   },
 
   beforeUnmount() {
-    clearInterval(this.pollTimer);
+    clearTimeout(this.wsReconnectTimer);
+    this.ws?.close();
   },
 };
 
