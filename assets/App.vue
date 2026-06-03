@@ -77,8 +77,9 @@
               :cx="pos.x"
               :cy="pos.y"
               r="120"
-              :fill="`rgba(${ledColor(i).join(',')},0.6)`"
+              :fill="`rgb(${ledColor(i).join(',')})`"
               filter="url(#glow)"
+              style="mix-blend-mode: screen; opacity: 0.2"
             />
           </template>
 
@@ -187,6 +188,7 @@ export default {
       leds: [],
       ledCount: null,
       online: false,
+      powered: true,
       sending: false,
       manualPayload: '',
       lastResponse: null,
@@ -300,6 +302,7 @@ export default {
     },
 
     isLit(i) {
+      if (!this.powered) return false;
       const c = this.ledColor(i);
       return c[0] > 0 || c[1] > 0 || c[2] > 0;
     },
@@ -325,6 +328,7 @@ export default {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         this.leds = data.leds || [];
+        this.powered = data.on !== false;
         this.online = true;
       } catch {
         this.online = false;
@@ -355,6 +359,7 @@ export default {
         const data = await res.json();
         this.lastResponse = JSON.stringify(data, null, 2);
         this.leds = data.leds || this.leds;
+        if ('on' in data) this.powered = data.on !== false;
       } catch (e) {
         this.lastResponse = 'Error: ' + e.message;
       } finally {
