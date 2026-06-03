@@ -66,7 +66,7 @@
         >
           <defs>
             <filter id="glow" x="-300%" y="-300%" width="700%" height="700%">
-              <feGaussianBlur stdDeviation="55" />
+              <feGaussianBlur stdDeviation="37" />
             </filter>
           </defs>
 
@@ -76,10 +76,10 @@
               v-if="isLit(i)"
               :cx="pos.x"
               :cy="pos.y"
-              r="120"
+              r="80"
               :fill="`rgb(${ledColor(i).join(',')})`"
               filter="url(#glow)"
-              style="mix-blend-mode: screen; opacity: 0.2"
+              style="mix-blend-mode: screen; opacity: 0.1"
             />
           </template>
 
