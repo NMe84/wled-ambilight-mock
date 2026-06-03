@@ -39,7 +39,6 @@ class WebSocketServerCommand extends Command
         $clients = [];       // id => socket resource
         $clientState = [];   // id => 'handshake'|'connected'
         $lastHash = '';
-        $lastCheck = 0.0;
 
         while (true) {
             $read = array_values($clients);
@@ -47,7 +46,7 @@ class WebSocketServerCommand extends Command
             $write = $except = null;
 
             // stream_select returns false on signal (SIGINT), which exits the loop
-            if (stream_select($read, $write, $except, 0, 50000) === false) {
+            if (stream_select($read, $write, $except, 0, 40000) === false) {
                 break;
             }
 
@@ -78,20 +77,16 @@ class WebSocketServerCommand extends Command
                 }
             }
 
-            $now = microtime(true);
-            if ($now - $lastCheck >= 0.05) {
-                $lastCheck = $now;
-                if (file_exists($stateFile)) {
-                    $hash = md5_file($stateFile);
-                    if ($hash !== $lastHash) {
-                        $lastHash = $hash;
-                        $frame = $this->encodeFrame(json_encode($this->ledState->getState()));
-                        foreach ($clients as $id => $sock) {
-                            if (($clientState[$id] ?? '') === 'connected') {
-                                if (@fwrite($sock, $frame) === false) {
-                                    @fclose($sock);
-                                    unset($clients[$id], $clientState[$id]);
-                                }
+            if (file_exists($stateFile)) {
+                $hash = md5_file($stateFile);
+                if ($hash !== $lastHash) {
+                    $lastHash = $hash;
+                    $frame = $this->encodeFrame(json_encode($this->ledState->getState()));
+                    foreach ($clients as $id => $sock) {
+                        if (($clientState[$id] ?? '') === 'connected') {
+                            if (@fwrite($sock, $frame) === false) {
+                                @fclose($sock);
+                                unset($clients[$id], $clientState[$id]);
                             }
                         }
                     }
