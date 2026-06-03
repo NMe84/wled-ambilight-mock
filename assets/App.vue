@@ -319,7 +319,7 @@ export default {
       };
 
       ws.onmessage = ({ data }) => {
-        const state = JSON.parse(data);
+        const { state } = JSON.parse(data);
         this.leds = state.leds || [];
         this.powered = state.on !== false;
       };

@@ -64,16 +64,33 @@ class WebSocketServerCommand extends Command
                 $id = (int) $sock;
                 $data = fread($sock, 8192);
 
-                if ($data === false || $data === '') {
+                if ($data === false || ($data === '' && feof($sock))) {
                     fclose($sock);
                     unset($clients[$id], $clientState[$id]);
                     continue;
                 }
 
+                if ($data === '') {
+                    continue; // non-blocking read with no data yet
+                }
+
                 if (($clientState[$id] ?? '') === 'handshake') {
                     fwrite($sock, $this->buildHandshakeResponse($data));
                     $clientState[$id] = 'connected';
-                    fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getState())));
+                    fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
+                } elseif (($clientState[$id] ?? '') === 'connected') {
+                    $payload = $this->decodeFrame($data);
+                    if ($payload !== null && $payload !== '') {
+                        $update = json_decode($payload, true);
+                        if (!is_array($update)) {
+                            // ignore unparseable frames
+                        } elseif (!empty($update['v'])) {
+                            // {"v":true} — explicit state request
+                            fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
+                        } elseif (!empty($update)) {
+                            $this->ledState->applyUpdate($update);
+                        }
+                    }
                 }
             }
 
@@ -81,9 +98,16 @@ class WebSocketServerCommand extends Command
                 $hash = md5_file($stateFile);
                 if ($hash !== $lastHash) {
                     $lastHash = $hash;
-                    $frame = $this->encodeFrame(json_encode($this->ledState->getState()));
+                    $frame = $this->encodeFrame(json_encode($this->ledState->getSiPayload()));
                     foreach ($clients as $id => $sock) {
-                        if (($clientState[$id] ?? '') === 'connected') {
+                        if (($clientState[$id] ?? '') !== 'connected') {
+                            continue;
+                        }
+                        // Only write when the socket can accept data; skip rather than
+                        // close when the buffer is full (e.g. a sender that doesn't read).
+                        $w = [$sock];
+                        $n = null;
+                        if (@stream_select($n, $w, $n, 0, 0) > 0) {
                             if (@fwrite($sock, $frame) === false) {
                                 @fclose($sock);
                                 unset($clients[$id], $clientState[$id]);
@@ -96,6 +120,59 @@ class WebSocketServerCommand extends Command
 
         fclose($server);
         return Command::SUCCESS;
+    }
+
+    private function decodeFrame(string $data): ?string
+    {
+        if (strlen($data) < 2) {
+            return null;
+        }
+
+        $byte1 = ord($data[0]);
+        $byte2 = ord($data[1]);
+        $opcode = $byte1 & 0x0F;
+        $masked = ($byte2 & 0x80) !== 0;
+        $len = $byte2 & 0x7F;
+        $offset = 2;
+
+        // Only handle text frames (opcode 1)
+        if ($opcode !== 1) {
+            return null;
+        }
+
+        if ($len === 126) {
+            if (strlen($data) < 4) {
+                return null;
+            }
+            $len = unpack('n', substr($data, 2, 2))[1];
+            $offset = 4;
+        } elseif ($len === 127) {
+            if (strlen($data) < 10) {
+                return null;
+            }
+            $len = unpack('J', substr($data, 2, 8))[1];
+            $offset = 10;
+        }
+
+        if ($masked) {
+            if (strlen($data) < $offset + 4 + $len) {
+                return null;
+            }
+            $mask = substr($data, $offset, 4);
+            $offset += 4;
+            $payload = substr($data, $offset, $len);
+            $unmasked = '';
+            for ($i = 0; $i < $len; $i++) {
+                $unmasked .= chr(ord($payload[$i]) ^ ord($mask[$i % 4]));
+            }
+            return $unmasked;
+        }
+
+        if (strlen($data) < $offset + $len) {
+            return null;
+        }
+
+        return substr($data, $offset, $len);
     }
 
     private function buildHandshakeResponse(string $request): string

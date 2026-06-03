@@ -104,6 +104,69 @@ class LedStateService
         }
     }
 
+    public function buildStateResponse(array $state): array
+    {
+        $ledCount = count($state['leds']);
+
+        return [
+            'on' => $state['on'],
+            'bri' => $state['bri'],
+            'transition' => 0,
+            'mainseg' => 0,
+            'seg' => [[
+                'id' => 0,
+                'start' => 0,
+                'stop' => $ledCount,
+                'len' => $ledCount,
+                'on' => $state['on'],
+                'bri' => $state['bri'],
+                'col' => $state['leds'][0] ?? [0, 0, 0],
+                'fx' => 0,
+                'sel' => true,
+                'rev' => false,
+            ]],
+            'leds' => $state['leds'],
+        ];
+    }
+
+    public function buildInfoResponse(): array
+    {
+        return [
+            'ver' => '0.14.0-mock',
+            'vid' => 1000000,
+            'leds' => [
+                'count' => $this->ledCount,
+                'rgbw' => false,
+                'wv' => false,
+                'fps' => 60,
+                'pwr' => 0,
+                'maxpwr' => 5500,
+                'maxseg' => 32,
+            ],
+            'name' => 'WLED Mock',
+            'udpport' => 21324,
+            'live' => false,
+            'ws' => -1,
+            'fxcount' => 117,
+            'palcount' => 70,
+            'arch' => 'mock',
+            'brand' => 'WLED',
+            'product' => 'Mock',
+            'mac' => '00:00:00:00:00:00',
+            'ip' => '127.0.0.1',
+        ];
+    }
+
+    public function getSiPayload(): array
+    {
+        $state = $this->getState();
+
+        return [
+            'state' => $this->buildStateResponse($state),
+            'info' => $this->buildInfoResponse(),
+        ];
+    }
+
     public function reset(): array
     {
         $state = [
