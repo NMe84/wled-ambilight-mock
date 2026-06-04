@@ -38,6 +38,7 @@ class WebSocketServerCommand extends Command
 
         $clients = [];       // id => socket resource
         $clientState = [];   // id => 'handshake'|'connected'
+        $clientBuffers = []; // id => partial frame data (TCP fragmentation reassembly)
         $lastHash = '';
         $skipBroadcastTo = null; // client that triggered the last applyUpdate — don't echo back
 
@@ -67,7 +68,7 @@ class WebSocketServerCommand extends Command
 
                 if ($data === false || ($data === '' && feof($sock))) {
                     fclose($sock);
-                    unset($clients[$id], $clientState[$id]);
+                    unset($clients[$id], $clientState[$id], $clientBuffers[$id]);
                     continue;
                 }
 
@@ -78,20 +79,13 @@ class WebSocketServerCommand extends Command
                 if (($clientState[$id] ?? '') === 'handshake') {
                     fwrite($sock, $this->buildHandshakeResponse($data));
                     $clientState[$id] = 'connected';
-                    // Use blocking mode for this single write: non-blocking fwrite on Windows
-                    // silently truncates large frames, leaving the client with a partial WebSocket
-                    // frame it can never recover from (manifests as immediate 1006 disconnects).
-                    stream_set_blocking($sock, true);
-                    fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
-                    stream_set_blocking($sock, false);
                 } elseif (($clientState[$id] ?? '') === 'connected') {
-                    // RFC 6455: respond to CLOSE frame before the client force-resets TCP
-                    if (strlen($data) >= 2 && (ord($data[0]) & 0x0F) === 8) {
-                        @fwrite($sock, "\x88\x00");
-                        fclose($sock);
-                        unset($clients[$id], $clientState[$id]);
-                        continue;
+                    // Reassemble TCP-fragmented WebSocket frames before parsing
+                    if (!empty($clientBuffers[$id])) {
+                        $data = $clientBuffers[$id] . $data;
                     }
+                    $clientBuffers[$id] = '';
+
                     $payload = $this->decodeFrame($data);
                     if ($payload !== null && $payload !== '') {
                         $update = json_decode($payload, true);
@@ -104,6 +98,19 @@ class WebSocketServerCommand extends Command
                             $this->ledState->applyUpdate($update);
                             $skipBroadcastTo = $id;
                         }
+                    } elseif ($payload === null && strlen($data) >= 2) {
+                        $opcode = ord($data[0]) & 0x0F;
+                        if ($opcode === 8) {
+                            // RFC 6455: respond to CLOSE frame before the client force-resets TCP
+                            @fwrite($sock, "\x88\x00");
+                            fclose($sock);
+                            unset($clients[$id], $clientState[$id], $clientBuffers[$id]);
+                            continue;
+                        } elseif ($opcode === 1) {
+                            // Partial text frame — buffer for reassembly on next read
+                            $clientBuffers[$id] = $data;
+                        }
+                        // Other control frames (ping etc.): discard silently
                     }
                 }
             }
@@ -124,7 +131,7 @@ class WebSocketServerCommand extends Command
                         if (@stream_select($n, $w, $n, 0, 0) > 0) {
                             if (fwrite($sock, $frame) === false) {
                                 fclose($sock);
-                                unset($clients[$id], $clientState[$id]);
+                                unset($clients[$id], $clientState[$id], $clientBuffers[$id]);
                             }
                         }
                     }
