@@ -78,7 +78,12 @@ class WebSocketServerCommand extends Command
                 if (($clientState[$id] ?? '') === 'handshake') {
                     fwrite($sock, $this->buildHandshakeResponse($data));
                     $clientState[$id] = 'connected';
+                    // Use blocking mode for this single write: non-blocking fwrite on Windows
+                    // silently truncates large frames, leaving the client with a partial WebSocket
+                    // frame it can never recover from (manifests as immediate 1006 disconnects).
+                    stream_set_blocking($sock, true);
                     fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
+                    stream_set_blocking($sock, false);
                 } elseif (($clientState[$id] ?? '') === 'connected') {
                     // RFC 6455: respond to CLOSE frame before the client force-resets TCP
                     if (strlen($data) >= 2 && (ord($data[0]) & 0x0F) === 8) {
