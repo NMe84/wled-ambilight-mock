@@ -39,6 +39,7 @@ class WebSocketServerCommand extends Command
         $clients = [];       // id => socket resource
         $clientState = [];   // id => 'handshake'|'connected'
         $lastHash = '';
+        $skipBroadcastTo = null; // client that triggered the last applyUpdate — don't echo back
 
         while (true) {
             $read = array_values($clients);
@@ -96,6 +97,7 @@ class WebSocketServerCommand extends Command
                             fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
                         } elseif (!empty($update)) {
                             $this->ledState->applyUpdate($update);
+                            $skipBroadcastTo = $id;
                         }
                     }
                 }
@@ -107,7 +109,7 @@ class WebSocketServerCommand extends Command
                     $lastHash = $hash;
                     $frame = $this->encodeFrame(json_encode($this->ledState->getSiPayload()));
                     foreach ($clients as $id => $sock) {
-                        if (($clientState[$id] ?? '') !== 'connected') {
+                        if (($clientState[$id] ?? '') !== 'connected' || $id === $skipBroadcastTo) {
                             continue;
                         }
                         // Only write when the socket can accept data; skip rather than
@@ -115,12 +117,13 @@ class WebSocketServerCommand extends Command
                         $w = [$sock];
                         $n = null;
                         if (@stream_select($n, $w, $n, 0, 0) > 0) {
-                            if (@fwrite($sock, $frame) === false) {
-                                @fclose($sock);
+                            if (fwrite($sock, $frame) === false) {
+                                fclose($sock);
                                 unset($clients[$id], $clientState[$id]);
                             }
                         }
                     }
+                    $skipBroadcastTo = null;
                 }
             }
         }
