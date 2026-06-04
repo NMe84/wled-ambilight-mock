@@ -79,6 +79,13 @@ class WebSocketServerCommand extends Command
                     $clientState[$id] = 'connected';
                     fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
                 } elseif (($clientState[$id] ?? '') === 'connected') {
+                    // RFC 6455: respond to CLOSE frame before the client force-resets TCP
+                    if (strlen($data) >= 2 && (ord($data[0]) & 0x0F) === 8) {
+                        @fwrite($sock, "\x88\x00");
+                        fclose($sock);
+                        unset($clients[$id], $clientState[$id]);
+                        continue;
+                    }
                     $payload = $this->decodeFrame($data);
                     if ($payload !== null && $payload !== '') {
                         $update = json_decode($payload, true);
