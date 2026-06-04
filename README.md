@@ -54,7 +54,7 @@ The WebSocket server at `ws://localhost:8001` implements WLED's live-update prot
 
 ### Server → client (push)
 
-On connect the server immediately pushes the current LED state. Subsequently, whenever state changes (via HTTP API or another WebSocket client) all connected clients receive the new state within one poll tick (~40 ms).
+Whenever state changes (via HTTP API or another WebSocket client) all connected clients receive the new state within one poll tick (~40 ms). Send `{"v":true}` immediately after connecting to request the current state without waiting for the next change.
 
 The push payload matches WLED's `/json/si` envelope:
 
