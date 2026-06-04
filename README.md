@@ -10,7 +10,7 @@ A development mock for the WLED HTTP API. Accepts ambilight LED colour data and 
 
 ## Running
 
-Two processes must run simultaneously if you want to be able to use both websockets and the JSON API. Open two terminal windows:
+Two processes must run simultaneously if you want to be able to use both websockets and the JSON API or the visual representation of the LED strip around a TV. Open two terminal windows:
 
 **Terminal 1 — WebSocket server**
 
@@ -20,7 +20,7 @@ php bin/console app:websocket-server
 
 Listens on `ws://0.0.0.0:8001` by default. Pass `--port=XXXX` to use a different port (also update `WS_PORT` in `assets/App.vue` and rebuild).
 
-**Terminal 2 — HTTP server (optional)**
+**Terminal 2 — HTTP server**
 
 ```bash
 php -S localhost:8000 -t public
