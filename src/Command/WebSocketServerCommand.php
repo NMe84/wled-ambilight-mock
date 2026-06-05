@@ -36,9 +36,10 @@ class WebSocketServerCommand extends Command
 
         $output->writeln("WebSocket server listening on ws://0.0.0.0:{$port}");
 
-        $clients = [];       // id => socket resource
-        $clientState = [];   // id => 'handshake'|'connected'
-        $clientBuffers = []; // id => partial frame data (TCP fragmentation reassembly)
+        $clients = [];        // id => socket resource
+        $clientState = [];    // id => 'handshake'|'connected'
+        $clientBuffers = [];  // id => partial frame data (TCP fragmentation reassembly)
+        $clientAddresses = []; // id => remote address string
         $lastHash = '';
         $skipBroadcastTo = null; // client that triggered the last applyUpdate — don't echo back
 
@@ -57,8 +58,11 @@ class WebSocketServerCommand extends Command
                     $conn = @stream_socket_accept($server, 0);
                     if ($conn) {
                         stream_set_blocking($conn, false);
-                        $clients[(int) $conn] = $conn;
-                        $clientState[(int) $conn] = 'handshake';
+                        $id = (int) $conn;
+                        $clients[$id] = $conn;
+                        $clientState[$id] = 'handshake';
+                        $clientAddresses[$id] = stream_socket_get_name($conn, true) ?: 'unknown';
+                        $output->writeln(sprintf('[%s] Client connected: %s', date('H:i:s'), $clientAddresses[$id]));
                     }
                     continue;
                 }
@@ -67,8 +71,9 @@ class WebSocketServerCommand extends Command
                 $data = fread($sock, 8192);
 
                 if ($data === false || ($data === '' && feof($sock))) {
+                    $output->writeln(sprintf('[%s] Client disconnected: %s', date('H:i:s'), $clientAddresses[$id] ?? 'unknown'));
                     fclose($sock);
-                    unset($clients[$id], $clientState[$id], $clientBuffers[$id]);
+                    unset($clients[$id], $clientState[$id], $clientBuffers[$id], $clientAddresses[$id]);
                     continue;
                 }
 
@@ -91,6 +96,8 @@ class WebSocketServerCommand extends Command
                         $update = json_decode($payload, true);
                         if (!is_array($update)) {
                             // ignore unparseable frames
+                        } elseif (isset($update['log'])) {
+                            $output->writeln(sprintf('[%s] %s: %s', date('H:i:s'), $clientAddresses[$id] ?? 'unknown', $update['log']));
                         } elseif (!empty($update['v'])) {
                             // {"v":true} — explicit state request
                             fwrite($sock, $this->encodeFrame(json_encode($this->ledState->getSiPayload())));
@@ -102,9 +109,10 @@ class WebSocketServerCommand extends Command
                         $opcode = ord($data[0]) & 0x0F;
                         if ($opcode === 8) {
                             // RFC 6455: respond to CLOSE frame before the client force-resets TCP
+                            $output->writeln(sprintf('[%s] Client disconnected: %s', date('H:i:s'), $clientAddresses[$id] ?? 'unknown'));
                             @fwrite($sock, "\x88\x00");
                             fclose($sock);
-                            unset($clients[$id], $clientState[$id], $clientBuffers[$id]);
+                            unset($clients[$id], $clientState[$id], $clientBuffers[$id], $clientAddresses[$id]);
                             continue;
                         } elseif ($opcode === 1) {
                             // Partial text frame — buffer for reassembly on next read
